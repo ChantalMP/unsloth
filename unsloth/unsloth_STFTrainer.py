@@ -12,7 +12,7 @@ from transformers.integrations import hp_params
 from transformers.trainer import TRAINER_STATE_NAME
 from transformers.trainer_callback import ExportableState
 from transformers.trainer_pt_utils import get_model_param_count
-from transformers.trainer_utils import has_length, HPSearchBackend, speed_metrics
+from transformers.trainer_utils import has_length, HPSearchBackend, speed_metrics, TrainOutput
 from transformers.training_args import OptimizerNames, ParallelMode
 from trl.trainer.sft_trainer import SFTTrainer
 import warnings
