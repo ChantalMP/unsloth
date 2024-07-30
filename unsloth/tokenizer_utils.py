@@ -128,7 +128,7 @@ def convert_to_fast_tokenizer(
 ):
     is_fast = getattr(slow_tokenizer, "is_fast", False)
     if is_fast: return slow_tokenizer
-    
+
     try:
         tokenizer_name = slow_tokenizer.__class__.__name__
         lowered_tokenizer_name = tokenizer_name.lower()
@@ -261,7 +261,7 @@ def assert_same_tokenization(slow_tokenizer, fast_tokenizer):
     check_chat_template1 = True
     check_chat_template2 = True
     check_chat_template3 = True
-    
+
     """
     Weirdly Mistral tokenizers are actually correct??
     Ie below will actually load mistral v1 and v3 incorrectly!
@@ -396,7 +396,7 @@ def fix_sentencepiece_gguf(saved_location):
     from transformers.utils import sentencepiece_model_pb2
     import json
     from enum import IntEnum
-    
+
     class SentencePieceTokenTypes(IntEnum):
         NORMAL = 1
         UNKNOWN = 2
@@ -508,7 +508,7 @@ def load_correct_tokenizer(
             fast_tokenizer.add_bos_token = slow_tokenizer.add_bos_token
         if hasattr(fast_tokenizer, "add_eos_token") and hasattr(slow_tokenizer, "add_eos_token"):
             fast_tokenizer.add_eos_token = slow_tokenizer.add_eos_token
-        
+
         # Confirm if slow and fast are equivalent!
         if assert_same_tokenization(slow_tokenizer, fast_tokenizer):
             return fast_tokenizer
@@ -625,7 +625,7 @@ def check_tokenizer(
                     f"Fix your tokenizer since it'll perform out of bounds memory accesses."
                 )
             pass
-            
+
             if IS_COLAB_ENVIRONMENT or IS_KAGGLE_ENVIRONMENT:
                 cache_dir = "huggingface_tokenizers_cache"
             else:
@@ -693,7 +693,7 @@ def fix_untrained_tokens(model, tokenizer, train_dataset, eps = 1e-16):
     indicator_untrained2 = torch.amax(lm_head_matrix,   axis = 1) <= eps
     # Combine both checks
     indicator_untrained = indicator_untrained1 & indicator_untrained2
-    
+
     where_untrained = torch.where(indicator_untrained)[0]
     n_untrained = where_untrained.shape[0]
     n_trained = embedding_matrix.shape[0] - n_untrained
@@ -703,7 +703,7 @@ def fix_untrained_tokens(model, tokenizer, train_dataset, eps = 1e-16):
     if len(where_untrained) == 0: return
 
     # Remove untrained indices where it's longer
-    
+
     where_untrained_set = frozenset(where_untrained)
     actual_bad_tokens = tokenizer.convert_ids_to_tokens(where_untrained)
     # Remove None items in actual_bad_tokens
@@ -928,7 +928,7 @@ def add_new_tokens(
         internal_model = internal_model.model
     pass
     internal_model._need_to_train_embeddings = True
-    
+
     return
 pass
 
@@ -953,76 +953,3 @@ import trl.trainer.sft_trainer
 from trl.trainer.sft_trainer import *
 from transformers.trainer import *
 
-def patch_sft_trainer_tokenizer():
-    """
-        Patches the trainer with changes
-    """
-    for function_name, replacer in (
-        ("_prepare_non_packed_dataloader", "def tokenize(element):",),
-        # ("_prepare_packed_dataloader", "if dataset_text_field is not None",),
-    ):
-        function = getsource(eval(f"trl.trainer.sft_trainer.SFTTrainer.{function_name}"))
-        where = function.find("def")
-        function = function.split("\n")
-        function = "\n".join(x[where:] for x in function)
-
-        check_text = \
-        "\n"\
-        "test_text = dataset[0][dataset_text_field] if (formatting_func is None or not use_formatting_func) else formatting_func(dataset[0])[0]\n"\
-        "chat_template = getattr(tokenizer, 'chat_template', None)\n"\
-        "chat_template = '' if chat_template is None else chat_template\n"\
-        "has_bos_token_already = (test_text.startswith(tokenizer.bos_token) or tokenizer.bos_token in chat_template) "\
-        "if getattr(tokenizer, 'bos_token', None) is not None else False\n"\
-        "add_special_tokens = False if has_bos_token_already else add_special_tokens\n\n"
-
-        check_text = check_text.split("\n")
-        check_text = "\n".join(" "*where + x for x in check_text)
-
-        function = function.replace(replacer, check_text + replacer)
-        exec(function, globals())
-
-        exec(f"trl.trainer.sft_trainer.SFTTrainer.{function_name} = {function_name}", globals())
-    pass
-
-    # Patch train with fix_untrained_tokens
-    function_name, replacer = "train", "if resume_from_checkpoint is False:"
-    function = getsource(eval(f"trl.trainer.sft_trainer.SFTTrainer.{function_name}"))
-    where = function.find("def")
-    function = function.split("\n")
-    function = "\n".join(x[where:] for x in function)
-
-    check_text = \
-    "\n"\
-    "if self._inner_training_loop.__name__ != '_fast_inner_training_loop':\n"\
-    "    raise RuntimeError(\n"\
-    "       'Please do not edit specific areas of the Unsloth codebase or you will get CUDA segfaults.'\n"\
-    "    )\n"\
-    "pass\n"\
-    "import subprocess, re, gc, numpy as np\n"\
-    "a = np.array([0,])\n"\
-    "try:\n"\
-    "    a = subprocess.check_output('nvidia-smi --query-gpu=memory.used --format=csv', shell = True)\n"\
-    "    a = re.findall(rb'([\\d]{1,})[\\s]{1,}M', a)\n"\
-    "    a = np.array([int(x.decode('utf-8'))/1024 for x in a])\n"\
-    "except:\n"\
-    "    if not torch.cuda.is_available():\n"\
-    "        raise RuntimeError('Unsloth: We do not support AMD / Intel machines yet - it is a work in progress!')\n"\
-    "if ((a - PRE_CHECK) >= 1).sum() > 1:\n"\
-    "    raise RuntimeError('Unsloth currently does not support multi GPU setups - but we are working on it!')\n"\
-    "for _ in range(3):\n"\
-    "    gc.collect()\n"\
-    "    torch.cuda.empty_cache()\n"\
-    "pass\n"\
-    "\n"\
-    "fix_untrained_tokens(self.model, self.tokenizer, self.train_dataset, eps = 1e-16)\n\n"
-
-    check_text = check_text.split("\n")
-    check_text = "\n".join(" "*where + x for x in check_text)
-
-    function = function.replace(replacer, check_text + replacer)
-    exec(function, globals())
-
-    exec(f"trl.trainer.sft_trainer.SFTTrainer.{function_name} = {function_name}", globals())
-pass
-
-patch_sft_trainer_tokenizer()
