@@ -1106,7 +1106,7 @@ class LlamaExtendedRotaryEmbedding(torch.nn.Module):
 
         t = torch.arange(self.current_rope_size, device="cpu", dtype=torch.int64).float()
 
-        freqs = torch.outer(t, self.inv_freq)
+        freqs = torch.outer(t, self.inv_freq.cpu())
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
         self.register_buffer("cos_cached", emb.cos().to(dtype=dtype, device=device, non_blocking=True), persistent=False)
