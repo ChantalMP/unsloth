@@ -1031,7 +1031,7 @@ class LlamaRotaryEmbedding(torch.nn.Module):
     def extend_rope_embedding(self, x, seq_len):
         if seq_len <= self.current_rope_size: return
         # Iteratively grow by increments of 8192
-        self.current_rope_size = int(round(seq_len / 8192)) * 8192
+        self.current_rope_size = int(math.ceil(seq_len / 8192)) * 8192
         self._set_cos_sin_cache(self.current_rope_size, device = "cuda:0", dtype = x.dtype)
     pass
 pass
@@ -1153,7 +1153,7 @@ class LlamaExtendedRotaryEmbedding(torch.nn.Module):
     def extend_rope_embedding(self, x, seq_len):
         if seq_len <= self.current_rope_size: return
         # Iteratively grow by increments of 8192
-        self.current_rope_size = int(round(seq_len / 8192)) * 8192
+        self.current_rope_size = int(math.ceil(seq_len / 8192)) * 8192
         self._set_cos_sin_cache(self.current_rope_size, device = "cuda:0", dtype = x.dtype)
     pass
 pass
